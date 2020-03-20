@@ -1,7 +1,7 @@
-from flask import Flask
+from flask import Flask , jsonify
 app = Flask(__name__)
 
-all_services ={"result":[{"id":0 , "name":"bubble_sort", "id":1 , "name":"merge_sort"}]}
+all_services ={"result":[{"id":0 , "name":"bubble_sort"},{ "id":1 , "name":"merge_sort"}]}
 
 
 @app.route('/')
@@ -10,5 +10,7 @@ def index():
   
 @app.route('/api/getAllServices')
 def getAllservices():
-  return all_services
+  return jsonify(all_services)
+  
+app.run(port=5000)
 
