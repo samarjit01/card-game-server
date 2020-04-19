@@ -112,7 +112,7 @@ def isValidPass(passedcards , cards):
 
 def distributeCards():
     cards = [i+1 for i in range(52)]
-    #random.shuffle(cards)
+    random.shuffle(cards)
     return list(chunks(cards,13))
 
 def getNeighbours(passDir):
