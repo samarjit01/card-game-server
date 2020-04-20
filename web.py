@@ -344,30 +344,55 @@ def getScores(gameScores , onTableCards , suit):
     pointCards = [i for i in onTableCards if (getSuit(i) == 'HEART' or i == 50)]
     pointsOnBoard = getBoardPoints(pointCards)
     idx = valuedCards.index(max(valuedCards))
-
-
+    cardTaker = 'p' + str(idx+1)
     for i in range(len(gameScores)):
         if i == idx:
             gameScores[i] += pointsOnBoard
-    return gameScores
+    return cardTaker , gameScores
+
+
+@app.route('/playerCard/<int:game_id>/<string:player_id>', methods=['GET'])
+def getPlayerCards():
+    player = getPlayer(game_id , player_id)
+    game = getGame(game_id)
+    playerCards =  game['gameState']['cards'][player_id]
+    return jsonify({'playerCards': playerCards})
+
+@app.route('/onTableCard/<int:game_id>/<string:player_id>', methods=['GET'])
+def getOnTableCards():
+    player = getPlayer(game_id , player_id)
+    game = getGame(game_id)
+    onTableCards = game['gameState']['onTableCards']
+    return jsonify({'onTableCards': onTableCards})
+
+@app.route('/turn/<int:game_id>/<string:player_id>', methods=['GET'])
+def getTurn():
+    player = getPlayer(game_id , player_id)
+    game = getGame(game_id)
+    turn = game['gameState']['turn']
+    return jsonify({'turn': turn})
+
+
 
 
 
 @app.route('/play/<int:game_id>/<string:player_id>', methods=['GET','POST','PUT'])
 def playGame(game_id , player_id):
-    if  request.method == 'POST':
-        request_body = request.json
-        player = getPlayer(game_id , player_id)
-        cards = request_body['cards']
-        startNewGame = request_body['startNewGame']
-        game = getGame(game_id)
-        playerTurn = player_id
 
-        orientation = game['gameState']['gamePlayDir']
+    if  request.method == 'POST':
+        player = getPlayer(game_id , player_id)
+        game = getGame(game_id)
         onTableCards = game['gameState']['onTableCards']
         gameScores = game['gameState']['gameScores']
-        suit = game['gameState']['suit']
         playerCards =  game['gameState']['cards'][player_id]
+        request_body = request.json
+        cards = request_body['cards']
+        startNewGame = request_body['startNewGame']
+        playerTurn = player_id
+        orientation = game['gameState']['gamePlayDir']
+
+        suit = game['gameState']['suit']
+
         round = game['gameState']['round']
 
 
@@ -396,19 +421,18 @@ def playGame(game_id , player_id):
                     game['gameState']['turn'] = getNextTurn(playerTurn,orientation)
                     game['gameState']['onTableCards'] = onTableCards
                     game['gameState']['cards'][player_id] = playerCards
-
                     msg = player['username'] + ' Played Card '
 
                     Logs[str(game_id)]['msg'].append(msg)
 
 
-
                     if(len(onTableCards) == 4):
                         round += 1
-                        scores = getScores(gameScores , onTableCards , suit)
+                        cardTaker , scores = getScores(gameScores , onTableCards , suit)
                         game['gameState']['onTableCards'] = []
                         game['gameState']['gameScores'] = scores
                         game['gameState']['round'] = round
+                        game['gameState']['turn'] = cardTaker
 
                         msg =  'Round ' + str(round) + ' Finished '
 
@@ -455,4 +479,3 @@ def getNextCardPassDir(Direction):
         return 'SELF'
     if(Direction == 'SELF'):
         return 'RIGHT'
-
