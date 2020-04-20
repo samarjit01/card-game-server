@@ -350,24 +350,28 @@ def getScores(gameScores , onTableCards , suit):
             gameScores[i] += pointsOnBoard
     return cardTaker , gameScores
 
+def rotateArray(a,n,c = 1):
+    n = n*c
+    r_a = (a[n:] + a[:n])
+    return r_a
+
 
 @app.route('/playerCard/<int:game_id>/<string:player_id>', methods=['GET'])
-def getPlayerCards():
-    player = getPlayer(game_id , player_id)
+def getPlayerCards(game_id , player_id):
     game = getGame(game_id)
     playerCards =  game['gameState']['cards'][player_id]
     return jsonify({'playerCards': playerCards})
 
 @app.route('/onTableCard/<int:game_id>/<string:player_id>', methods=['GET'])
-def getOnTableCards():
-    player = getPlayer(game_id , player_id)
+def getOnTableCards(game_id , player_id):
     game = getGame(game_id)
     onTableCards = game['gameState']['onTableCards']
+    onTableCards= rotateArray(onTableCards ,game['playerId'][player_id] )
+    print(game['playerId'][player_id] )
     return jsonify({'onTableCards': onTableCards})
 
-@app.route('/turn/<int:game_id>/<string:player_id>', methods=['GET'])
-def getTurn():
-    player = getPlayer(game_id , player_id)
+@app.route('/turn/<int:game_id>', methods=['GET'])
+def getTurn(game_id):
     game = getGame(game_id)
     turn = game['gameState']['turn']
     return jsonify({'turn': turn})
@@ -479,3 +483,4 @@ def getNextCardPassDir(Direction):
         return 'SELF'
     if(Direction == 'SELF'):
         return 'RIGHT'
+
