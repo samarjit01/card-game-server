@@ -366,6 +366,9 @@ def getPlayerCards(game_id , player_id):
 def getOnTableCards(game_id , player_id):
     game = getGame(game_id)
     onTableCards = game['gameState']['onTableCards']
+    notAvailableCard = 4 - len(onTableCards)
+    for i in range(notAvailableCard):
+        onTableCards.append(0)
     onTableCards= rotateArray(onTableCards ,game['playerId'][player_id] )
     print(game['playerId'][player_id] )
     return jsonify({'onTableCards': onTableCards})
