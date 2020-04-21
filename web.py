@@ -2,11 +2,16 @@ from flask import Flask, jsonify
 from flask import abort , make_response , request
 import json , ast
 import random
+import copy
 from flask_cors import CORS
+from flask_socketio import SocketIO, emit, join_room ,send,leave_room
 
 
 app = Flask(__name__)
 CORS(app)
+socket = SocketIO(app, cors_allowed_origins="*")
+
+
 
 
 
@@ -19,9 +24,22 @@ Games = [
         'playerId':{'p1':0,'p2':1,'p3':2,'p4':3},
         'playerActive': [False , False , False , False],
         'playerCardPassed' : [False , False , False , False],
+        'doStartNewGame' : [False , False , False , False],
+        'breCount' : [0,0,0,0],
         'gamePlayed' : 0,
         'gameState':{
             'round':0,
+            'playerTableCards':{
+                'p1':[0,0,0,0],
+                'p2':[0,0,0,0],
+                'p3':[0,0,0,0],
+                'p4':[0,0,0,0]
+            },'playerTableUsernames':{
+                'p1':[],
+                'p2':[],
+                'p3':[],
+                'p4':[]
+            },
             'cards':{
                 'p1':[],
                 'p2':[],
@@ -29,7 +47,7 @@ Games = [
                 'p4':[]
             },
             'gameScores':[0,0,0,0],
-            'onTableCards':[],
+            'onTableCards':[0,0,0,0],
             'suit':'HEART',
             'turn':'p1',
             'isCardPassed':False,
@@ -234,6 +252,54 @@ def getLog(game_id):
     return msg
 
 
+@app.route('/reset/<int:game_id>', methods=['GET'])
+def gameReset(game_id):
+    game = getGame(game_id)
+    if len(game) == 0:
+        return jsonify({'Message': 'No Such Game'})
+    game['playerActive'] = [True , True , True ,True]
+    Games[0] = game
+    startGame(game_id)
+    endOfRound(game)
+    cards = distributeCards()
+
+    game['gameState']['cards']['p1'] = cards[0]
+    game['gameState']['cards']['p2'] = cards[1]
+    game['gameState']['cards']['p3'] = cards[2]
+    game['gameState']['cards']['p4'] = cards[3]
+    game['gameState']['state'] = "NOTPASSED"
+    msg = 'Game Reset '
+    Logs[str(game['id'])]['msg'].append(msg)
+    game['doStartNewGame'] = [False , False , False , False]
+    game['gameState']['gameScores'] = [0,0,0,0]
+    game['gameState']['breCount'] = [0,0,0,0]
+
+    return jsonify({'isSuccessful': True})
+
+
+@app.route('/restart/<int:game_id>', methods=['GET'])
+def gameRestart(game_id):
+    game = getGame(game_id)
+    if len(game) == 0:
+        return jsonify({'Message': 'No Such Game'})
+
+    endOfRound(game)
+    cards = distributeCards()
+
+    game['gameState']['cards']['p1'] = cards[0]
+    game['gameState']['cards']['p2'] = cards[1]
+    game['gameState']['cards']['p3'] = cards[2]
+    game['gameState']['cards']['p4'] = cards[3]
+    game['gameState']['state'] = "NOTPASSED"
+    msg = 'Game Restarted '
+    Logs[str(game['id'])]['msg'].append(msg)
+    game['doStartNewGame'] = [False , False , False , False]
+    game['gameState']['gameScores'] = [0,0,0,0]
+    game['gameState']['breCount'] = [0,0,0,0]
+
+    return jsonify({'isSuccessful': True})
+
+
 @app.route('/logs/<int:game_id>', methods=['GET'])
 def getLogs(game_id):
     if request.method == 'GET' :
@@ -245,13 +311,81 @@ def getLogs(game_id):
         return jsonify({'Logs': logs})
 
 
+def endOfRound(game):
+    if(game['gameState']['state'] != 'FINISHED') :
+        game['gamePlayed'] = game['gamePlayed']
+    else:
+        game['gamePlayed'] = game['gamePlayed'] + 1
+
+    game['gameState']['state'] = 'FINISHED'
+    game['playerCardPassed'] = [False , False , False , False]
+    game['gameState']['cards']['p1'] = []
+    game['gameState']['cards']['p2'] = []
+    game['gameState']['cards']['p3'] = []
+    game['gameState']['cards']['p4'] = []
+
+    game['gameState']['cardPassed']['p1'] = []
+    game['gameState']['cardPassed']['p2'] = []
+    game['gameState']['cardPassed']['p3'] = []
+    game['gameState']['cardPassed']['p4'] = []
+
+
+
+    game['gameState']['isCardPassed'] = False
+
+    game['gameState']['cardPassDir'] = getNextCardPassDir(game['gameState']['cardPassDir'])
+
+
+    msg = 'Game ' + str(game['gamePlayed'])+' is Finished '
+    Logs[str(game['id'])]['msg'].append(msg)
+
+@app.route('/continue/<int:game_id>/<string:player_id>', methods=['GET','POST','PUT'])
+def renewGame(game_id , player_id):
+    if request.method == 'GET' :
+        game = getGame(game_id)
+    if len(game) == 0:
+            return jsonify({'Message': 'No Such Game'})
+
+    game['doStartNewGame'][game['playerId'][player_id]] = True
+    doAllagree = [i for i in game['doStartNewGame'] if i == True ]
+    if(len(doAllagree) != 4) :
+        return jsonify({'game': game})
+    else:
+        endOfRound(game)
+        cards = distributeCards()
+
+        game['gameState']['cards']['p1'] = cards[0]
+        game['gameState']['cards']['p2'] = cards[1]
+        game['gameState']['cards']['p3'] = cards[2]
+        game['gameState']['cards']['p4'] = cards[3]
+        game['gameState']['state'] = "NOTPASSED"
+        msg = 'Game Started '
+        Logs[str(game['id'])]['msg'].append(msg)
+        game['doStartNewGame'] = [False , False , False , False]
+        return jsonify({'game': game})
+
+
+
+
+
+
+
 
 @app.route('/<int:game_id>', methods=['GET','POST','PUT'])
 def gameOps(game_id):
     if request.method == 'GET' :
         game = getGame(game_id)
+
         if len(game) == 0:
             return jsonify({'Message': 'No Such Game'})
+
+        if(len(game['gameState']['playerTableUsernames']['p1']) == 0):
+            tempUsernames = copy.copy(game['playerName'])
+            game['gameState']['playerTableUsernames']['p1'] = getOnTableCards(tempUsernames,0)
+            game['gameState']['playerTableUsernames']['p2'] = getOnTableCards(tempUsernames,1)
+            game['gameState']['playerTableUsernames']['p3'] = getOnTableCards(tempUsernames,2)
+            game['gameState']['playerTableUsernames']['p4'] = getOnTableCards(tempUsernames,3)
+
         return jsonify({'game': game})
 
     if  request.method == 'PUT':
@@ -288,18 +422,20 @@ def addPlayers(game_id , player_id):
         return jsonify({'isSuccessful': True})
 
 def getSuit(card):
-    if(card >= 0 and card <= 12):
+    if(card == 0):
+        return 'JOKER'
+    if(card >= 1 and card <= 13):
         return 'HEART'
-    elif(card >=13 and card <= 25):
+    elif(card >=14 and card <= 26):
         return 'CLUB'
-    elif(card >= 26 and card <= 38):
+    elif(card >= 27 and card <= 39):
         return 'DIAMOND'
     else:
         return 'SPADE'
 
 def isPlayerHaveSuit(cards , suit):
     for card in cards:
-        if(getSuit(cards) == suit):
+        if(getSuit(card) == suit):
             return True
     return False
 
@@ -308,16 +444,14 @@ def isValidMove(card , playerTurn , game , playerId):
     onTable = game['gameState']['onTableCards']
     playerSuit = getSuit(card)
     suit = game['gameState']['suit']
-
     if(game['gameState']['turn'] != playerTurn):
         return False
     if(card not in playerCards):
         return False
-    if(len(onTable) == 0):
+    if(onTable.count(0) == 4 ):
         game['gameState']['suit'] = playerSuit
         return True
-
-    if(len(onTable) >= 1):
+    if(onTable.count(0) < 4):
         if(isPlayerHaveSuit(playerCards , suit) == False):
             return True
         return playerSuit == suit
@@ -332,23 +466,49 @@ def getBoardPoints(cards):
             point += 1
     return point
 
+def getActualValue(card):
+    if(card == 0):
+        return 0
+    if(card % 13 == 1):
+        return 14
+    elif(card % 13 == 11):
+        return 11
+    elif(card % 13 == 12):
+        return 12
+    elif(card % 13 == 0):
+        return 13
+    else:
+        return card%13
 
 def getScores(gameScores , onTableCards , suit):
     valuedCards = []
+    isBrePoint = False
     for i in onTableCards:
         if getSuit(i) == suit:
-            valuedCards.append(i)
+            actual_value = getActualValue(i)
+            if(actual_value == 12) :
+                isBrePoint = True
+            else:
+                isBrePoint = False
+            valuedCards.append(actual_value)
         else:
             valuedCards.append(-1)
 
-    pointCards = [i for i in onTableCards if (getSuit(i) == 'HEART' or i == 50)]
+    pointCards = [i for i in onTableCards if (getSuit(i) == 'HEART' or i == 51)]
     pointsOnBoard = getBoardPoints(pointCards)
     idx = valuedCards.index(max(valuedCards))
     cardTaker = 'p' + str(idx+1)
+
+    print('cardTaker' , cardTaker , onTableCards , valuedCards)
     for i in range(len(gameScores)):
         if i == idx:
             gameScores[i] += pointsOnBoard
-    return cardTaker , gameScores
+    return cardTaker , gameScores , isBrePoint , idx
+
+def rotateArray(a,n,c = 1):
+    n = n*c
+    r_a = (a[n:] + a[:n])
+    return r_a
 
 def rotateArray(a,n,c = 1):
     n = n*c
@@ -362,16 +522,9 @@ def getPlayerCards(game_id , player_id):
     playerCards =  game['gameState']['cards'][player_id]
     return jsonify({'playerCards': playerCards})
 
-@app.route('/onTableCard/<int:game_id>/<string:player_id>', methods=['GET'])
-def getOnTableCards(game_id , player_id):
-    game = getGame(game_id)
-    onTableCards = game['gameState']['onTableCards']
-    notAvailableCard = 4 - len(onTableCards)
-    for i in range(notAvailableCard):
-        onTableCards.append(0)
-    onTableCards= rotateArray(onTableCards ,game['playerId'][player_id] )
-    print(game['playerId'][player_id] )
-    return jsonify({'onTableCards': onTableCards})
+def getOnTableCards(onTableCards , playerIdx):
+    onTableCards= rotateArray(onTableCards ,playerIdx )
+    return onTableCards
 
 @app.route('/turn/<int:game_id>', methods=['GET'])
 def getTurn(game_id):
@@ -405,68 +558,68 @@ def playGame(game_id , player_id):
 
         if(game['gameState']['state'] == 'NOTPASSED'):
             if(isValidPass(cards ,playerCards) == False):
-                return jsonify({'Message': 'Not Valid Pass'})
+                return jsonify({'isSuccessful': False , 'error':'Card does not matches to Playing Suit'})
             game['gameState']['cardPassed'][player_id] = cards
             idx = game['playerId'][player['player_id']]
             game['playerCardPassed'][idx]  = True
             msg =  player['username'] + ' Selected Cards to Pass '
-
             Logs[str(game_id)]['msg'].append(msg)
             startPlayingGame(game_id)
+
 
         elif(game['gameState']['state'] == 'STARTED'):
 
             if(isValidCard(cards ,playerCards) == False):
-                return jsonify({'Message': 'Card Not Present in Players Hand'})
+                return jsonify({'isSuccessful': False , 'error':'Card not in your Hand'})
 
             if(len(cards) == 1):
                 card = cards[0]
                 if(isValidMove(card,playerTurn,game,player_id)):
-
                     playerCards.remove(card)
-                    onTableCards.append(card)
+                    onTableCards[game['playerId'][player['player_id']]] = card
                     game['gameState']['turn'] = getNextTurn(playerTurn,orientation)
                     game['gameState']['onTableCards'] = onTableCards
+                    tempCards = copy.copy(game['gameState']['onTableCards'])
+                    game['gameState']['playerTableCards']['p1'] = getOnTableCards(tempCards,0)
+                    game['gameState']['playerTableCards']['p2'] = getOnTableCards(tempCards,1)
+                    game['gameState']['playerTableCards']['p3'] = getOnTableCards(tempCards,2)
+                    game['gameState']['playerTableCards']['p4'] = getOnTableCards(tempCards,3)
+
                     game['gameState']['cards'][player_id] = playerCards
                     msg = player['username'] + ' Played Card '
 
                     Logs[str(game_id)]['msg'].append(msg)
+                    doRefresh()
 
 
-                    if(len(onTableCards) == 4):
+                    if(onTableCards.count(0) == 0):
                         round += 1
-                        cardTaker , scores = getScores(gameScores , onTableCards , suit)
-                        game['gameState']['onTableCards'] = []
+                        cardTaker , scores  , isBrePoint , idx = getScores(gameScores , onTableCards , suit)
+                        if(isBrePoint):
+                            game['breCount'][idx] += 1
+                        game['gameState']['onTableCards'] = [0,0,0,0]
+                        game['gameState']['playerTableCards']['p1'] = [0,0,0,0]
+                        game['gameState']['playerTableCards']['p2'] = [0,0,0,0]
+                        game['gameState']['playerTableCards']['p3'] = [0,0,0,0]
+                        game['gameState']['playerTableCards']['p4'] = [0,0,0,0]
+
                         game['gameState']['gameScores'] = scores
                         game['gameState']['round'] = round
                         game['gameState']['turn'] = cardTaker
+                        print(cardTaker)
 
                         msg =  'Round ' + str(round) + ' Finished '
 
                         Logs[str(game_id)]['msg'].append(msg)
+                        doRefresh()
 
-                        if(round == 13):
-                            game['gameState']['state'] = 'FINISHED'
-                            game['playerCardPassed'] = [False , False , False , False]
-                            game['gameState']['cards']['p1'] = []
-                            game['gameState']['cards']['p2'] = []
-                            game['gameState']['cards']['p3'] = []
-                            game['gameState']['cards']['p4'] = []
-
-                            game['gameState']['cardPassed']['p1'] = []
-                            game['gameState']['cardPassed']['p2'] = []
-                            game['gameState']['cardPassed']['p3'] = []
-                            game['gameState']['cardPassed']['p4'] = []
-
-                            game['gameState']['isCardPassed'] = False
-
-                            game['gameState']['cardPassDir'] = getNextCardPassDir(game['gameState']['cardPassDir'])
-                            game['gamePlayed'] = game['gamePlayed'] + 1
-                            msg = 'Game ' + str(game['gamePlayed'])+' is Finished '
-                            Logs[str(game_id)]['msg'].append(msg)
+                        if(round > 0 and round%13 == 0):
+                            endOfRound(game)
+                else:
+                    return jsonify({'isSuccessful': False , 'error':'Not your Turn'})
 
         elif(game['gameState']['state'] == 'FINISHED'):
-            return jsonify({'msg': 'Game finished'})
+            print("game finished")
 
         return jsonify({'isSuccessful': True})
 
@@ -477,7 +630,6 @@ def not_found(error):
 
 
 def getNextCardPassDir(Direction):
-    print("hullaa")
     if(Direction == 'LEFT'):
         return 'FRONT'
     if(Direction == 'RIGHT'):
@@ -486,4 +638,11 @@ def getNextCardPassDir(Direction):
         return 'SELF'
     if(Direction == 'SELF'):
         return 'RIGHT'
+
+
+def doRefresh():
+    socket.emit('doRefresh', {'refresh': True})
+
+if __name__ == '__main__':
+    socket.run(app)
 
