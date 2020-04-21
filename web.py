@@ -58,7 +58,7 @@ Games = [
                 'p4':[],
 
             },
-            'cardPassDir':'SELF',
+            'cardPassDir':'RIGHT',
             'gamePlayDir':'RIGHT',
             'state':'NOTSTARTED'
         }
@@ -634,7 +634,13 @@ def getNextCardPassDir(Direction):
     if(Direction == 'SELF'):
         return 'RIGHT'
 
+@socket.on('connect')
+def on_connect():
+    msg = 'Connected socket '
 
+    Logs['1']['msg'].append(msg)
+    socket.emit('doRefresh', {'refresh': True})
+    
 def doRefresh():
     msg = 'Refreshed'
 
