@@ -510,11 +510,6 @@ def rotateArray(a,n,c = 1):
     r_a = (a[n:] + a[:n])
     return r_a
 
-def rotateArray(a,n,c = 1):
-    n = n*c
-    r_a = (a[n:] + a[:n])
-    return r_a
-
 
 @app.route('/playerCard/<int:game_id>/<string:player_id>', methods=['GET'])
 def getPlayerCards(game_id , player_id):
@@ -645,4 +640,3 @@ def doRefresh():
 
 if __name__ == '__main__':
     socket.run(app)
-
