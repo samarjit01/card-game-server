@@ -636,6 +636,9 @@ def getNextCardPassDir(Direction):
 
 
 def doRefresh():
+    msg = 'Refreshed'
+
+    Logs['1']['msg'].append(msg)
     socket.emit('doRefresh', {'refresh': True})
 
 if __name__ == '__main__':
