@@ -20,7 +20,7 @@ Games = [
     {
         'id': 1,
         'isActive':False,
-        'playerName': ['samar','vikas','sagar','neil'],
+        'playerName': ['player1','player2','player3','player4'],
         'playerId':{'p1':0,'p2':1,'p3':2,'p4':3},
         'playerActive': [False , False , False , False],
         'playerCardPassed' : [False , False , False , False],
@@ -69,26 +69,26 @@ Players = [
     {
         'game_id':1,
         'player_id':'p1',
-        'username':'samar',
-        'password':'samar',
+        'username':'player1',
+        'password':'player1',
     },
     {
         'game_id':1,
         'player_id':'p2',
-        'username':'vikas',
-        'password':'vikas',
+        'username':'player2',
+        'password':'player2',
     },
     {
         'game_id':1,
         'player_id':'p3',
-        'username':'sagar',
-        'password':'sagar',
+        'username':'player3',
+        'password':'player3',
     },
     {
         'game_id':1,
         'player_id':'p4',
-        'username':'neil',
-        'password':'neil',
+        'username':'player4',
+        'password':'player4',
     }
 ]
 
@@ -207,23 +207,24 @@ def passCards(cards , cardsPassed , neighbours):
 
 def startGame(game_id):
     game = getGame(game_id)
-    activePlayerCount = 0
-    for player in game['playerActive']:
-        if(player == True):
-            activePlayerCount += 1
-    if(activePlayerCount == 4):
-        cards = distributeCards()
-        game['isActive'] = True
-        game['gameState']['cards']['p1'] = cards[0]
-        game['gameState']['cards']['p2'] = cards[1]
-        game['gameState']['cards']['p3'] = cards[2]
-        game['gameState']['cards']['p4'] = cards[3]
-        game['gameState']['state'] = "NOTPASSED"
-        msg = 'Game Started '
-        Logs[str(game_id)]['msg'].append(msg)
+    if(game['gameState']['state'] == 'NOTSTARTED' or game['gameState']['state'] == 'FINISHED'):
+        activePlayerCount = 0
+        for player in game['playerActive']:
+            if(player == True):
+                activePlayerCount += 1
+        if(activePlayerCount == 4):
+            cards = distributeCards()
+            game['isActive'] = True
+            game['gameState']['cards']['p1'] = cards[0]
+            game['gameState']['cards']['p2'] = cards[1]
+            game['gameState']['cards']['p3'] = cards[2]
+            game['gameState']['cards']['p4'] = cards[3]
+            game['gameState']['state'] = "NOTPASSED"
+            msg = 'Game Started '
+            Logs[str(game_id)]['msg'].append(msg)
 
-    else:
-        print("4 players required")
+        else:
+            print("4 players required")
 
 
 def startPlayingGame(game_id):
@@ -268,11 +269,20 @@ def gameReset(game_id):
     game['gameState']['cards']['p3'] = cards[2]
     game['gameState']['cards']['p4'] = cards[3]
     game['gameState']['state'] = "NOTPASSED"
+    game['playerCardPassed'] = [False , False , False , False]
     msg = 'Game Reset '
     Logs[str(game['id'])]['msg'].append(msg)
     game['doStartNewGame'] = [False , False , False , False]
     game['gameState']['gameScores'] = [0,0,0,0]
     game['gameState']['breCount'] = [0,0,0,0]
+    game['gamePlayed'] = 0
+    game['gameState']['round'] = 0
+    tempUsernames = copy.copy(game['playerName'])
+    game['gameState']['playerTableUsernames']['p1'] = getOnTableCards(tempUsernames,0)
+    game['gameState']['playerTableUsernames']['p2'] = getOnTableCards(tempUsernames,1)
+    game['gameState']['playerTableUsernames']['p3'] = getOnTableCards(tempUsernames,2)
+    game['gameState']['playerTableUsernames']['p4'] = getOnTableCards(tempUsernames,3)
+
 
     return jsonify({'isSuccessful': True})
 
@@ -398,26 +408,48 @@ def gameOps(game_id):
         return jsonify({'isSuccessful': True})
 
 
+@app.route('/showPlayers/<int:game_id>', methods=['GET'])
+def showPlayers(game_id):
+    return jsonify({'Data': Players})
 
 @app.route('/<int:game_id>/<string:player_id>', methods=['GET','POST','PUT'])
 def addPlayers(game_id , player_id):
 
     if  request.method == 'POST':
         request_body = request.json
+
         player = getPlayer(game_id , player_id)
-        if(len(player) == 0):
-            return jsonify({'Message': 'No such Player'})
+        game = git remotegetGame(game_id)
+        idx = game['playerId'][player['player_id']]
 
-        if(player['password'] ==  request_body['password']):
-             player['username'] = request_body['username']
-             game = getGame(game_id)
-             idx = game['playerId'][player['player_id']]
-             game['playerActive'][idx] = True
-             game['playerName'][idx] = request_body['username']
+        if(game['playerActive'][idx] == True):
+            if(player['password'] == request_body['password'] ):
+                return jsonify({'isSuccessful':True})
+            else:
+                return jsonify({'isSuccessful':False})
+        else:
+            player['password'] = request_body['password']
+
+        inputUserName = str(request_body['username'])
+        player['username'] = inputUserName[0:5]
+
+        msg = ""
+        if( game['playerActive'][idx]  == True):
+            msg = player['username'] + ' changed name '
+
+        else:
              msg = player['username'] + ' joined the Game '
-             Logs[str(game_id)]['msg'].append(msg)
-             startGame(game_id)
 
+        game['playerActive'][idx] = True
+        game['playerName'][idx] = inputUserName[0:5]
+        tempUsernames = copy.copy(game['playerName'])
+        game['gameState']['playerTableUsernames']['p1'] = getOnTableCards(tempUsernames,0)
+        game['gameState']['playerTableUsernames']['p2'] = getOnTableCards(tempUsernames,1)
+        game['gameState']['playerTableUsernames']['p3'] = getOnTableCards(tempUsernames,2)
+        game['gameState']['playerTableUsernames']['p4'] = getOnTableCards(tempUsernames,3)
+
+        Logs[str(game_id)]['msg'].append(msg)
+        startGame(game_id)
 
         return jsonify({'isSuccessful': True})
 
@@ -611,7 +643,7 @@ def playGame(game_id , player_id):
                         if(round > 0 and round%13 == 0):
                             endOfRound(game)
                 else:
-                    return jsonify({'isSuccessful': False , 'error':'Not your Turn'})
+                    return jsonify({'isSuccessful': False , 'error':'Select a valid suit'})
 
         elif(game['gameState']['state'] == 'FINISHED'):
             print("game finished")
@@ -640,12 +672,13 @@ def on_connect():
 
     Logs['1']['msg'].append(msg)
     socket.emit('doRefresh', {'refresh': True})
-    
+
 def doRefresh():
     msg = 'Refreshed'
 
     Logs['1']['msg'].append(msg)
     socket.emit('doRefresh', {'refresh': True})
+
 
 if __name__ == '__main__':
     socket.run(app)
