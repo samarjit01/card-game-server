@@ -419,7 +419,7 @@ def addPlayers(game_id , player_id):
         request_body = request.json
 
         player = getPlayer(game_id , player_id)
-        game = git remotegetGame(game_id)
+        game = getGame(game_id)
         idx = game['playerId'][player['player_id']]
 
         if(game['playerActive'][idx] == True):
