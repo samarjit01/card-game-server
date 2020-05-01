@@ -395,7 +395,9 @@ def getLog(game_id):
 
 @app.route('/reset/<int:game_id>', methods=['GET'])
 def gameReset(game_id):
+
     Games[0] = InitialStatusGame
+
     return jsonify({'isSuccessful': True})
 
 
@@ -543,11 +545,13 @@ def addPlayers(game_id , player_id):
         inputUserName = str(request_body['username'])
         player['username'] = inputUserName[0:8]
 
+
         if(game['playerActive'][idx] == True):
             if(player['password'] == request_body['password'] ):
 
                 msg = player['username'] + ' changed name '
                 Logs[str(game_id)]['msg'].append(msg)
+
 
                 game['playerName'][idx] = inputUserName[0:5]
                 tempUsernames = copy.copy(game['playerName'])
@@ -829,10 +833,12 @@ def on_sendMessage(data):
     msg = 'Send message to  socket '
     Logs['1']['msg'].append(msg)
 
+
     if(data['chatMsg'] == 'score'):
         socket.emit('message', { 'user': 'BOT', 'text': sendScoreData(1) })
     else:
         socket.emit('message', { 'user': data['userName'], 'text': data['chatMsg'] , 'player_id':data['player_id'] })
+
 
 
 
