@@ -14,7 +14,140 @@ CORS(app)
 socket = SocketIO(app, cors_allowed_origins="*")
 
 
-
+InitialStatusGame =  {
+        "breBoys": [],
+        "breCount": [
+            0,
+            0,
+            0,
+            0
+        ],
+        "doStartNewGame": [
+            False,
+            False,
+            False,
+            False
+        ],
+        "gamePlayed": 0,
+        "gameState": {
+            "cardPassDir": "RIGHT",
+            "cardPassed": {
+                "p1": [],
+                "p2": [],
+                "p3": [],
+                "p4": []
+            },
+            "cardTaker": "p1",
+            "cards": {
+                "p1": [],
+                "p2": [],
+                "p3": [],
+                "p4": []
+            },
+            "gamePlayDir": "RIGHT",
+            "gameScores": [
+                0,
+                0,
+                0,
+                0
+            ],
+            "isCardPassed": False,
+            "lastRoundCards": [
+                0,
+                0,
+                0,
+                0
+            ],
+            "onTableCards": [
+                0,
+                0,
+                0,
+                0
+            ],
+            "playerTableCards": {
+                "p1": [
+                    0,
+                    0,
+                    0,
+                    0
+                ],
+                "p2": [
+                    0,
+                    0,
+                    0,
+                    0
+                ],
+                "p3": [
+                    0,
+                    0,
+                    0,
+                    0
+                ],
+                "p4": [
+                    0,
+                    0,
+                    0,
+                    0
+                ]
+            },
+            "playerTableUsernames": {
+                "p1": [
+                    "player1",
+                    "player2",
+                    "player3",
+                    "player4"
+                ],
+                "p2": [
+                    "player2",
+                    "player3",
+                    "player4",
+                    "player1"
+                ],
+                "p3": [
+                    "player3",
+                    "player4",
+                    "player1",
+                    "player2"
+                ],
+                "p4": [
+                    "player4",
+                    "player1",
+                    "player2",
+                    "player3"
+                ]
+            },
+            "round": 0,
+            "state": "NOTSTARTED",
+            "suit": "HEART",
+            "turn": "p1"
+        },
+        "id": 1,
+        "isActive": False,
+        "playerActive": [
+            False,
+            False,
+            False,
+            False
+        ],
+        "playerCardPassed": [
+            False,
+            False,
+            False,
+            False
+        ],
+        "playerId": {
+            "p1": 0,
+            "p2": 1,
+            "p3": 2,
+            "p4": 3
+        },
+        "playerName": [
+            "player1",
+            "player2",
+            "player3",
+            "player4"
+        ]
+    }
 
 
 
@@ -262,34 +395,8 @@ def getLog(game_id):
 
 @app.route('/reset/<int:game_id>', methods=['GET'])
 def gameReset(game_id):
-    game = getGame(game_id)
-    if len(game) == 0:
-        return jsonify({'Message': 'No Such Game'})
-    game['playerActive'] = [True , True , True ,True]
-    Games[0] = game
-    startGame(game_id)
-    endOfRound(game)
-    cards = distributeCards()
 
-    game['gameState']['cards']['p1'] = cards[0]
-    game['gameState']['cards']['p2'] = cards[1]
-    game['gameState']['cards']['p3'] = cards[2]
-    game['gameState']['cards']['p4'] = cards[3]
-    game['gameState']['state'] = "NOTPASSED"
-    game['playerCardPassed'] = [False , False , False , False]
-    msg = 'Game Reset '
-    Logs[str(game['id'])]['msg'].append(msg)
-    game['doStartNewGame'] = [False , False , False , False]
-    game['gameState']['gameScores'] = [0,0,0,0]
-    game['gameState']['breCount'] = [0,0,0,0]
-    game['gamePlayed'] = 0
-    game['gameState']['round'] = 0
-    tempUsernames = copy.copy(game['playerName'])
-    game['gameState']['playerTableUsernames']['p1'] = getOnTableCards(tempUsernames,0)
-    game['gameState']['playerTableUsernames']['p2'] = getOnTableCards(tempUsernames,1)
-    game['gameState']['playerTableUsernames']['p3'] = getOnTableCards(tempUsernames,2)
-    game['gameState']['playerTableUsernames']['p4'] = getOnTableCards(tempUsernames,3)
-
+    Games[0] = InitialStatusGame
 
     return jsonify({'isSuccessful': True})
 
@@ -438,11 +545,13 @@ def addPlayers(game_id , player_id):
         inputUserName = str(request_body['username'])
         player['username'] = inputUserName[0:8]
 
+
         if(game['playerActive'][idx] == True):
             if(player['password'] == request_body['password'] ):
 
                 msg = player['username'] + ' changed name '
                 Logs[str(game_id)]['msg'].append(msg)
+
 
                 game['playerName'][idx] = inputUserName[0:5]
                 tempUsernames = copy.copy(game['playerName'])
@@ -704,13 +813,32 @@ def on_connect():
 
 
 
+def sendScoreData(game_id):
+    game = getGame(game_id)
+    scores = game['gameState']['gameScores']
+    breCount = game['breCount']
+    playerNames = game['playerName']
+
+    scoreidx = [i[0] for i in sorted(enumerate(scores), key=lambda x:x[1])]
+    scoreData ="Scores of current players : \n\n"
+    for i in range(4):
+        idx = scoreidx[i]
+        scoreData += (str(i+1) + '. ' +playerNames[idx] + " " + str(scores[idx]) + " " + str(breCount[idx])+"\n")
+    return scoreData
+
+
+
 @socket.on('sendMessage')
 def on_sendMessage(data):
     msg = 'Send message to  socket '
     Logs['1']['msg'].append(msg)
-    socket.emit('message', { 'user': data['userName'], 'text': data['chatMsg'] })
+
+
     if(data['chatMsg'] == 'score'):
-        socket.emit('message', { 'user': 'BOT', 'text': 'score : '})
+        socket.emit('message', { 'user': 'BOT', 'text': sendScoreData(1) })
+    else:
+        socket.emit('message', { 'user': data['userName'], 'text': data['chatMsg'] , 'player_id':data['player_id'] })
+
 
 
 
