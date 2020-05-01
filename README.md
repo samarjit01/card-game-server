@@ -1,2 +1,2 @@
 # SortingAlgo
-Learning all github functionalities by this repository
+Learning all github functionalities by this repository .
